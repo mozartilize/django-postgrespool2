@@ -4,7 +4,8 @@ from setuptools import setup
 from django_postgrespool2 import __version__, __author__
 
 required = [
-    'sqlalchemy',
+    'sqlalchemy>=1.2',
+    'django>=1.8',
 ]
 
 setup(
@@ -25,11 +26,9 @@ setup(
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python',
         'Programming Language :: Python :: 2.6',
-        'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
         'Framework :: Django',
-        'Framework :: Django :: 1.7',
         'Framework :: Django :: 1.8',
         'Framework :: Django :: 1.9',
         'Framework :: Django :: 1.10',
