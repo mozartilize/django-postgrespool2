@@ -13,6 +13,7 @@ if 'Psycopg2DatabaseWrapper' not in globals():
         # Django >= 1.9
         from django.db.backends.postgresql.base import (
             psycopg2,
+            PSYCOPG2_VERSION,
             Database,
             DatabaseWrapper as Psycopg2DatabaseWrapper,
         )
@@ -23,6 +24,7 @@ if 'Psycopg2DatabaseWrapper' not in globals():
         from django.db.backends.postgresql_psycopg2.base import (
             psycopg2,
             Database,
+            PSYCOPG2_VERSION,
             DatabaseWrapper as Psycopg2DatabaseWrapper,
         )
         from django.db.backends.postgresql_psycopg2.creation import (
@@ -30,13 +32,12 @@ if 'Psycopg2DatabaseWrapper' not in globals():
         )
 
 
-POOL_SETTINGS = 'DATABASE_POOL_ARGS'
 # DATABASE_POOL_ARGS should be something like:
 # {'max_overflow':10, 'pool_size':5, 'recycle':300}
-pool_args = getattr(settings, POOL_SETTINGS, {})
-if 'dialect' not in pool_args:
-    dialect = postgresql.dialect(dbapi=psycopg2)
-    pool_args['dialect'] = dialect
+pool_args = {'max_overflow': 10, 'pool_size': 5, 'recycle': 300}
+pool_args.update(getattr(settings, 'DATABASE_POOL_ARGS', {}))
+dialect = postgresql.dialect(dbapi=psycopg2)
+pool_args['dialect'] = dialect
 
 POOL_CLS = getattr(settings, 'DATABASE_POOL_CLASS', 'sqlalchemy.pool.QueuePool')
 pool_module_name, pool_cls_name = POOL_CLS.rsplit('.', 1)
@@ -53,7 +54,7 @@ def _log(message, *args):
 @event.listens_for(pool_cls, 'connect')
 def receive_connect(dbapi_conn, conn_record):
     # psycopg 2.8 add connection info thus assign connection record info to it
-    if hasattr(dbapi_conn, 'info'):
+    if PSYCOPG2_VERSION >= (2, 8, 0):
         conn_record.info = dbapi_conn.info
 
 
