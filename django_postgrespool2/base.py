@@ -64,6 +64,16 @@ def get_conn(**kw):
 
 
 class DatabaseCreation(Psycopg2DatabaseCreation):
+    def _clone_test_db(self, *args, **kw):
+        self.connection.dispose()
+        super(DatabaseCreation, self)._clone_test_db(*args, **kw)
+
+    def create_test_db(self, *args, **kw):
+        """Ensure connection pool is disposed before trying to create database.
+        """
+        self.connection.dispose()
+        super(DatabaseCreation, self).create_test_db(*args, **kw)
+
     def destroy_test_db(self, *args, **kw):
         """Ensure connection pool is disposed before trying to drop database.
         """
