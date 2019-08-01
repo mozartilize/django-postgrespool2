@@ -4,8 +4,9 @@ import logging
 from functools import partial
 
 from sqlalchemy import event
+from sqlalchemy.pool import manage
 from sqlalchemy.dialects import postgresql
-
+from django.dispatch import Signal
 from django.conf import settings
 
 if 'Psycopg2DatabaseWrapper' not in globals():
@@ -42,7 +43,10 @@ pool_args['dialect'] = dialect
 POOL_CLS = getattr(settings, 'DATABASE_POOL_CLASS', 'sqlalchemy.pool.QueuePool')
 pool_module_name, pool_cls_name = POOL_CLS.rsplit('.', 1)
 pool_cls = getattr(import_module(pool_module_name), pool_cls_name)
+pool_args['poolclass'] = pool_cls
 
+db_pool = manage(Database, **pool_args)
+pool_disposed = Signal(providing_args=["connection"])
 
 log = logging.getLogger('z.pool')
 
@@ -58,19 +62,12 @@ if settings.DEBUG:
     event.listen(pool_cls, 'connect', partial(_log, 'new connection'))
 
 
-def get_conn(**kw):
-    c = Database.connect(**kw)
-    return c
-
-
 class DatabaseCreation(Psycopg2DatabaseCreation):
     def _clone_test_db(self, *args, **kw):
         self.connection.dispose()
         super(DatabaseCreation, self)._clone_test_db(*args, **kw)
 
     def create_test_db(self, *args, **kw):
-        """Ensure connection pool is disposed before trying to create database.
-        """
         self.connection.dispose()
         super(DatabaseCreation, self).create_test_db(*args, **kw)
 
@@ -86,8 +83,7 @@ class DatabaseWrapper(Psycopg2DatabaseWrapper):
 
     def __init__(self, *args, **kwargs):
         super(DatabaseWrapper, self).__init__(*args, **kwargs)
-        self._pool = pool_cls(
-            lambda: get_conn(**self.get_connection_params()), **pool_args)
+        self._pool = None
         self._pool_connection = None
         self.creation = DatabaseCreation(self)
 
@@ -112,11 +108,21 @@ class DatabaseWrapper(Psycopg2DatabaseWrapper):
         return cursor
 
     def dispose(self):
-        """Dispose of the pool for this instance, closing all connections."""
+        """Dispose of the pool for this instance, closing all connections.
+        """
         self.close()
-        self.pool.dispose()
+        self._pool_connection = None
+        # _DBProxy.dispose doesn't actually call dispose on the pool
+        if self.pool:
+            self.pool.dispose()
+            self._pool = None
+        conn_params = self.get_connection_params()
+        db_pool.dispose(**conn_params)
+        pool_disposed.send(sender=self.__class__, connection=self)
 
     def get_new_connection(self, conn_params):
+        if not self._pool:
+            self._pool = db_pool.get_pool(**conn_params)
         # get new connection through pool, not creating a new one outside.
         self._pool_connection = self.pool.connect()
         c = self._pool_connection.connection  # dbapi connection
