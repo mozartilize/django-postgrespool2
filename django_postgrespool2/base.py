@@ -93,6 +93,8 @@ class DatabaseWrapper(Psycopg2DatabaseWrapper):
 
     def _close(self):
         if self._pool_connection is not None:
+            if not self.is_usable():
+                self._pool_connection.invalidate()
             with self.wrap_database_errors:
                 return self._pool_connection.close()
 
@@ -140,7 +142,6 @@ class DatabaseWrapper(Psycopg2DatabaseWrapper):
         return c
 
     def is_usable(self):
-        # https://github.com/kennethreitz/django-postgrespool/issues/24
-        if self._pool_connection is None:
+        if not self.connection:
             return False
-        return self._pool_connection.is_valid
+        return self.connection.closed == 0
